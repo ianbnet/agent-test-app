@@ -17,7 +17,7 @@ export class MemStorage implements IStorage {
   }
 
   async incrementCount(): Promise<Counter> {
-    this.count++;
+    this.count += 5;
     return { id: 1, count: this.count };
   }
 }
