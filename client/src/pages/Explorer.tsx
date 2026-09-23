@@ -189,8 +189,9 @@ export default function Explorer() {
     ? { left: 8, right: 58, top: 64, bottom: selected ? 150 : 90 }
     : { left: 360, right: infoOpen ? 420 : 24, top: 84, bottom: 84 };
   // What the camera should keep clear (callouts may overlap the edges a little more).
+  // (open sheets are not included: on phones the head and trunk should stay in view above them)
   const camInsets = mobile
-    ? { left: 0, right: 48, top: 56, bottom: (selected ? 140 : 76) + (sheet ? window.innerHeight * 0.46 - 70 : 0) }
+    ? { left: 0, right: 48, top: 56, bottom: selected ? 140 : 76 }
     : { left: 340, right: infoOpen ? 400 : 0, top: 70, bottom: 64 };
   const camKey = JSON.stringify(camInsets);
   useEffect(() => {

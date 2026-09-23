@@ -70,7 +70,9 @@ export function Connections() {
         world: anchorOf(model, sel.index).add(explodeOffset(sel.center, shared.uExplodeOrigin.value, explode, o)),
       });
     }
-    for (const c of arcs) {
+    // small screens get the closest few relations only (arcs still show all of them)
+    const limit = size.width < 640 ? 6 : size.width < 1100 ? 10 : Infinity;
+    for (const c of arcs.slice(0, limit)) {
       list.push({
         key: `${c.t.id}-${c.r.relation}`,
         id: c.t.id,
@@ -81,7 +83,7 @@ export function Connections() {
       });
     }
     calloutBus.set(list);
-  }, [runtime, selectedId, labels, arcs, explode, quiz]);
+  }, [runtime, selectedId, labels, arcs, explode, quiz, size.width]);
 
   useEffect(() => () => calloutBus.set([]), []);
 

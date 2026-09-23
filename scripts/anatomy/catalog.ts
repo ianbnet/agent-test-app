@@ -341,7 +341,9 @@ export function slug(s: string) {
 }
 
 export function titleCase(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  // Couinaud segments keep their Roman numerals ("Liver segment IV")
+  const t = s.replace(/\bsegment ([ivx]+)\b/g, (_, n: string) => `segment ${n.toUpperCase()}`);
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 export interface ClassifiedElement {
