@@ -53,6 +53,8 @@ interface ExplorerState {
   quiz: QuizState | null;
   loading: { sex: Sex; progress: number } | null;
   error: string | null;
+  /** Screen area (px) covered by panels; the camera frames the body in the rest. */
+  insets: { left: number; right: number; top: number; bottom: number };
 }
 
 interface ExplorerActions {
@@ -108,6 +110,7 @@ const initial: ExplorerState = {
   quiz: null,
   loading: null,
   error: null,
+  insets: { left: 0, right: 0, top: 0, bottom: 0 },
 };
 
 function isLikelyLowEnd() {

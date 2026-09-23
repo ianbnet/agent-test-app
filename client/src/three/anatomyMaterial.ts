@@ -16,6 +16,7 @@ export interface SharedUniforms {
   uState: THREE.IUniform<THREE.DataTexture>;
   uColor: THREE.IUniform<THREE.DataTexture>;
   uCenter: THREE.IUniform<THREE.DataTexture>;
+  uAxis: THREE.IUniform<THREE.DataTexture>;
   uExplode: THREE.IUniform<number>;
   uExplodeOrigin: THREE.IUniform<THREE.Vector3>;
   uTime: THREE.IUniform<number>;
@@ -27,11 +28,17 @@ export interface SharedUniforms {
   uSpine: THREE.IUniform<THREE.Vector4>;
 }
 
-export function createSharedUniforms(state: THREE.DataTexture, color: THREE.DataTexture, center: THREE.DataTexture): SharedUniforms {
+export function createSharedUniforms(
+  state: THREE.DataTexture,
+  color: THREE.DataTexture,
+  center: THREE.DataTexture,
+  axis: THREE.DataTexture,
+): SharedUniforms {
   return {
     uState: { value: state },
     uColor: { value: color },
     uCenter: { value: center },
+    uAxis: { value: axis },
     uExplode: { value: 0 },
     uExplodeOrigin: { value: new THREE.Vector3(0, 1, 0) },
     uTime: { value: 0 },
@@ -105,6 +112,8 @@ export interface AnatomyMaterialOptions {
   group: GroupId;
   pass: 0 | 1;
   quality: "high" | "balanced";
+  /** The geometry carries a baked `_ao` attribute. */
+  bakedAo: boolean;
 }
 
 export function createAnatomyMaterial(shared: SharedUniforms, opts: AnatomyMaterialOptions) {
@@ -131,12 +140,20 @@ export function createAnatomyMaterial(shared: SharedUniforms, opts: AnatomyMater
     uWrap: { value: look.wrap },
     uCapColor: { value: capColor },
     uCapMix: { value: look.cap ? 0.85 : 0.25 },
+    uAoStrength: { value: 1 },
   };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, shared, local);
+    const aoDefine = (opts.bakedAo ? "#define BAKED_AO\n" : "") + (opts.group === "muscle" && high ? "#define MUSCLE_FIBERS\n" : "");
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `#include <common>\n${VERTEX_PARS}`)
-      .replace("#include <project_vertex>", `#include <project_vertex>\n${VERTEX_PROJECT}`);
+      .replace(
+        "#include <common>",
+        `${aoDefine}#include <common>\n${VERTEX_PARS}\n#ifdef BAKED_AO\nattribute float _ao;\nvarying float vAo;\n#endif\n#ifdef MUSCLE_FIBERS\nuniform highp sampler2D uAxis;\nflat varying vec3 vAxis;\nflat varying vec3 vCenter;\n#endif`,
+      )
+      .replace(
+        "#include <project_vertex>",
+        `#include <project_vertex>\n${VERTEX_PROJECT}\n#ifdef BAKED_AO\nvAo = _ao;\n#endif\n#ifdef MUSCLE_FIBERS\nvAxis = texelFetch(uAxis, sidUV, 0).xyz;\nvCenter = ctr + explodeOffset(ctr);\n#endif`,
+      );
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",
@@ -151,11 +168,52 @@ uniform float uWrap;
 uniform float uAnimOn;
 uniform vec3 uHeart;
 uniform vec4 uSpine;
+uniform float uAoStrength;
 flat varying vec4 vState;
 flat varying vec4 vBase;
-varying vec3 vWorld;`,
+varying vec3 vWorld;
+#ifdef BAKED_AO
+varying float vAo;
+#endif
+#ifdef MUSCLE_FIBERS
+flat varying vec3 vAxis;
+flat varying vec3 vCenter;
+#endif`,
       )
-      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", "vec4 diffuseColor = vec4( vBase.rgb, vState.r );")
+      .replace(
+        "vec4 diffuseColor = vec4( diffuse, opacity );",
+        `vec4 diffuseColor = vec4( vBase.rgb, vState.r );
+#ifdef MUSCLE_FIBERS
+  {
+    // fascicles: fine concentric striations around the muscle's long axis, faded out
+    // where they would alias at a distance
+    vec3 d = vWorld - vCenter;
+    float r = length(cross(d, vAxis));
+    float along = dot(d, vAxis);
+    float p1 = r * 1900.0 + sin(along * 90.0) * 1.3;
+    float p2 = r * 4700.0 + sin(along * 210.0 + r * 400.0) * 2.0;
+    float fade = clamp(1.6 - fwidth(p1) * 0.9, 0.0, 1.0);
+    float fade2 = clamp(1.6 - fwidth(p2) * 0.9, 0.0, 1.0);
+    float stri = 0.55 * (0.5 + 0.5 * sin(p1)) * fade + 0.45 * (0.5 + 0.5 * sin(p2)) * fade2;
+    diffuseColor.rgb *= mix(1.0, 0.86 + 0.2 * stri, max(fade, fade2 * 0.6));
+  }
+#endif`,
+      )
+      .replace(
+        "#include <aomap_fragment>",
+        `#include <aomap_fragment>
+#ifdef BAKED_AO
+  {
+    // cut faces and exploded parts no longer sit in their baked surroundings
+    float bakedAo = mix(1.0, vAo, uAoStrength * (isCap ? 0.0 : 1.0) * (1.0 - clamp(uExplode * 4.0, 0.0, 0.7)));
+    float aoCurve = bakedAo * bakedAo * (3.0 - 2.0 * bakedAo);
+    reflectedLight.indirectDiffuse *= aoCurve;
+    reflectedLight.indirectSpecular *= mix(1.0, aoCurve, 0.8);
+    reflectedLight.directDiffuse *= mix(1.0, aoCurve, 0.55);
+    reflectedLight.directSpecular *= mix(1.0, aoCurve, 0.5);
+  }
+#endif`,
+      )
       .replace(
         "#include <normal_fragment_begin>",
         `#include <normal_fragment_begin>
@@ -204,7 +262,7 @@ varying vec3 vWorld;`,
 #include <opaque_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => `anatomy-${opts.pass}-${opts.quality}`;
+  mat.customProgramCacheKey = () => `anatomy-${opts.pass}-${opts.quality}-${opts.bakedAo ? 1 : 0}`;
   return { material: mat, local };
 }
 

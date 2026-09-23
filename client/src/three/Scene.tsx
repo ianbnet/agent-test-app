@@ -72,6 +72,7 @@ export function Scene({ model, onHover }: { model: LoadedModel | null; onHover?:
   const dpr: [number, number] = quality === "high" ? [1, 2] : [1, 1.25];
   return (
     <Canvas
+      frameloop="demand"
       dpr={dpr}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance", preserveDrawingBuffer: false }}
       camera={{ fov: 32, near: 0.01, far: 30, position: [0, 1, 3.2] }}

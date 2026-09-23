@@ -11,6 +11,8 @@ export interface LoadedModel {
   byId: Map<string, StructureMeta>;
   /** A point on each structure's surface near its centroid (for labels and arcs), xyz per index. */
   anchors: Float32Array;
+  /** Principal (longest) axis of each structure, xyz per index — muscle fibre direction. */
+  axes: Float32Array;
   /** Structures sharing a knowledge-base concept (left/right twins, merged parts). */
   byConcept: Map<string, StructureMeta[]>;
 }
@@ -55,6 +57,7 @@ async function fetchModel(sex: Sex, onProgress?: (fraction: number) => void): Pr
     groups.push({ group: entry.group, geometry, matrix: mesh.matrixWorld.clone() });
   });
   const anchors = computeAnchors(manifest, groups);
+  const axes = computeAxes(manifest, groups);
   const byId = new Map(manifest.structures.map((s) => [s.id, s]));
   const byConcept = new Map<string, StructureMeta[]>();
   for (const s of manifest.structures) {
@@ -62,7 +65,55 @@ async function fetchModel(sex: Sex, onProgress?: (fraction: number) => void): Pr
     if (list) list.push(s);
     else byConcept.set(s.concept, [s]);
   }
-  return { sex, manifest, groups, byId, byConcept, anchors };
+  return { sex, manifest, groups, byId, byConcept, anchors, axes };
+}
+
+/** Longest principal axis per structure (power iteration on the vertex covariance). */
+function computeAxes(manifest: ModelManifest, groups: LoadedModel["groups"]) {
+  const n = manifest.structures.length;
+  const cov = new Float64Array(n * 6);
+  const cnt = new Uint32Array(n);
+  const v = new THREE.Vector3();
+  for (const g of groups) {
+    const pos = g.geometry.getAttribute("position");
+    const sid = g.geometry.getAttribute("_sid");
+    if (!pos || !sid) continue;
+    for (let i = 0; i < pos.count; i++) {
+      const k = Math.round(sid.getX(i));
+      const s = manifest.structures[k];
+      if (!s) continue;
+      v.fromBufferAttribute(pos, i).applyMatrix4(g.matrix);
+      const x = v.x - s.center[0];
+      const y = v.y - s.center[1];
+      const z = v.z - s.center[2];
+      const o = k * 6;
+      cov[o] += x * x;
+      cov[o + 1] += x * y;
+      cov[o + 2] += x * z;
+      cov[o + 3] += y * y;
+      cov[o + 4] += y * z;
+      cov[o + 5] += z * z;
+      cnt[k]++;
+    }
+  }
+  const axes = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) {
+    const o = k * 6;
+    let a = 0.3;
+    let b = 1;
+    let c = 0.2;
+    for (let it = 0; it < 24; it++) {
+      const na = cov[o] * a + cov[o + 1] * b + cov[o + 2] * c;
+      const nb = cov[o + 1] * a + cov[o + 3] * b + cov[o + 4] * c;
+      const nc = cov[o + 2] * a + cov[o + 4] * b + cov[o + 5] * c;
+      const l = Math.hypot(na, nb, nc) || 1;
+      a = na / l;
+      b = nb / l;
+      c = nc / l;
+    }
+    axes.set(cnt[k] ? [a, b, c] : [0, 1, 0], k * 3);
+  }
+  return axes;
 }
 
 /** Surface vertex closest to each structure's centroid (centroids of curved parts float in space). */

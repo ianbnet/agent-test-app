@@ -34,7 +34,7 @@ export function DepthStack() {
       style={{ height: ROW_H * 5, touchAction: "none" }}
       onPointerDown={(e) => {
         dragging.current = true;
-        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+        e.currentTarget.setPointerCapture?.(e.pointerId);
         fromPointer(e.clientY);
       }}
       onPointerMove={(e) => dragging.current && fromPointer(e.clientY)}

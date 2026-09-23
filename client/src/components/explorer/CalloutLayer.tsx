@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { calloutBus, type Callout } from "@/three/callouts";
-import { useExplorer } from "@/state/store";
+import { useModel } from "@/data/modelContext";
+import { reveal } from "@/state/actions";
 
 export interface Insets {
   left: number;
@@ -18,6 +19,7 @@ const GAP_PRIMARY = 40;
  */
 export function CalloutLayer({ insets }: { insets: Insets }) {
   const [callouts, setCallouts] = useState<Callout[]>(calloutBus.callouts);
+  const model = useModel();
   const root = useRef<HTMLDivElement>(null);
   const labelEls = useRef<(HTMLButtonElement | null)[]>([]);
   const pathEls = useRef<(SVGPathElement | null)[]>([]);
@@ -141,7 +143,7 @@ export function CalloutLayer({ insets }: { insets: Insets }) {
           key={c.key}
           ref={(el) => (labelEls.current[i] = el)}
           type="button"
-          onClick={() => !c.primary && useExplorer.getState().select(c.id)}
+          onClick={() => !c.primary && model && reveal(model, c.id, { focus: false })}
           className={
             "pointer-events-auto absolute left-0 top-0 flex max-w-[210px] flex-col rounded-lg border px-2 py-1 text-left leading-tight transition-opacity duration-200 " +
             (c.primary

@@ -37,7 +37,7 @@ export function BottomSheet({ open, onClose, title, children }: { open: boolean;
       <div
         className="flex shrink-0 cursor-grab touch-none flex-col items-center px-4 pb-2 pt-2.5"
         onPointerDown={(e) => {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          e.currentTarget.setPointerCapture(e.pointerId);
           start.current = { y: e.clientY, h: height };
         }}
         onPointerMove={(e) => {
@@ -145,7 +145,7 @@ export function DepthRail() {
       <div
         className="glass pointer-events-auto relative flex w-11 flex-col items-center rounded-full py-4 touch-none"
         onPointerDown={(e) => {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          e.currentTarget.setPointerCapture(e.pointerId);
           setActive(true);
           from(e.clientY);
         }}

@@ -6,6 +6,7 @@ import { useModel } from "@/data/modelContext";
 import { SYSTEM_BY_ID } from "@/data/systems";
 import { useExplorer, type QuizState } from "@/state/store";
 import { cn } from "@/lib/utils";
+import { visibility } from "@/three/visibility";
 import { Seg } from "./primitives";
 
 const BEST_KEY = "anatomica.quiz.best";
@@ -20,6 +21,17 @@ function readBest() {
 
 /** Structures that are plainly visible in the current dissection state. */
 function questionPool(model: LoadedModel): StructureMeta[] {
+  // Best: ask the GPU what is actually on screen from this camera.
+  const counts = visibility.sample?.();
+  if (counts && counts.size) {
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    const minPx = Math.max(6, total * 0.002);
+    const seen = [...counts.entries()]
+      .filter(([, n]) => n >= minPx)
+      .map(([i]) => model.manifest.structures[i])
+      .filter((s) => s && s.group !== "skin" && s.group !== "membrane");
+    if (seen.length >= 4) return seen;
+  }
   const st = useExplorer.getState();
   const exposed = Math.min(4, Math.round(st.peel));
   const ok = (s: StructureMeta) =>

@@ -3,6 +3,8 @@ import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { useExplorer } from "@/state/store";
 import { useAnatomyRuntime } from "./AnatomyModel";
+import { viewShift } from "./viewShift";
+import { visibility } from "./visibility";
 
 export interface PickHandlers {
   /** Called for quiz "find it" taps instead of selecting. */
@@ -31,9 +33,7 @@ export function Interaction({ onHover }: { onHover?: (info: { id: string; x: num
       const y = clientY - rect.top;
       if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
       const dpr = gl.getPixelRatio();
-      const w = Math.floor(rect.width * dpr);
-      const h = Math.floor(rect.height * dpr);
-      camera.setViewOffset(w, h, Math.floor(x * dpr), Math.floor(y * dpr), 1, 1);
+      viewShift.pickOffset(camera, Math.floor(x), Math.floor(y), rect.width, rect.height, dpr);
       const prevTarget = gl.getRenderTarget();
       gl.getClearColor(clear);
       const prevAlpha = gl.getClearAlpha();
@@ -43,11 +43,36 @@ export function Interaction({ onHover }: { onHover?: (info: { id: string; x: num
       gl.render(runtime.pickScene, camera);
       gl.setRenderTarget(prevTarget);
       gl.setClearColor(clear, prevAlpha);
-      camera.clearViewOffset();
+      viewShift.apply(camera, rect.width, rect.height, true);
       gl.readRenderTargetPixels(target, 0, 0, 1, 1, buf);
       const id = buf[0] + buf[1] * 256;
       if (!id) return null;
       return runtime.model.manifest.structures[id - 1]?.id ?? null;
+    };
+
+    const sampleTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true });
+    visibility.sample = () => {
+      const rect = el.getBoundingClientRect();
+      const w = 200;
+      const h = Math.max(1, Math.round((200 * rect.height) / rect.width));
+      sampleTarget.setSize(w, h);
+      const px = new Uint8Array(w * h * 4);
+      const prevTarget = gl.getRenderTarget();
+      gl.getClearColor(clear);
+      const prevAlpha = gl.getClearAlpha();
+      gl.setRenderTarget(sampleTarget);
+      gl.setClearColor(0x000000, 0);
+      gl.clear(true, true, false);
+      gl.render(runtime.pickScene, camera);
+      gl.setRenderTarget(prevTarget);
+      gl.setClearColor(clear, prevAlpha);
+      gl.readRenderTargetPixels(sampleTarget, 0, 0, w, h, px);
+      const counts = new Map<number, number>();
+      for (let i = 0; i < px.length; i += 4) {
+        const id = px[i] + px[i + 1] * 256;
+        if (id) counts.set(id - 1, (counts.get(id - 1) ?? 0) + 1);
+      }
+      return counts;
     };
 
     let down: { x: number; y: number; t: number; id: number } | null = null;
@@ -115,6 +140,8 @@ export function Interaction({ onHover }: { onHover?: (info: { id: string; x: num
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointerleave", onLeave);
       window.clearTimeout(hoverTimer);
+      visibility.sample = null;
+      sampleTarget.dispose();
     };
   }, [runtime, gl, camera, target, buf, onHover]);
 

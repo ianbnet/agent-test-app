@@ -42,15 +42,15 @@ export class StructureState {
   readonly state: THREE.DataTexture;
   readonly color: THREE.DataTexture;
   readonly center: THREE.DataTexture;
+  readonly axis: THREE.DataTexture;
   private cur: Float32Array;
   private target: Float32Array;
   private curColor: Float32Array;
   private targetColor: Float32Array;
-  private anim: Uint8Array;
   private settled = false;
   private tmp = new THREE.Color();
 
-  constructor(private structures: StructureMeta[]) {
+  constructor(private structures: StructureMeta[], axes?: Float32Array) {
     this.n = structures.length;
     const h = Math.ceil(this.n / TEX_WIDTH);
     const mk = () => {
@@ -63,11 +63,15 @@ export class StructureState {
     this.state = mk();
     this.color = mk();
     this.center = mk();
+    this.axis = mk();
+    if (axes) {
+      const a = this.axis.image.data as Float32Array;
+      for (let i = 0; i < this.n; i++) a.set([axes[i * 3], axes[i * 3 + 1], axes[i * 3 + 2], 0], i * 4);
+    }
     this.cur = this.state.image.data as Float32Array;
     this.curColor = this.color.image.data as Float32Array;
     this.target = new Float32Array(this.cur.length);
     this.targetColor = new Float32Array(this.curColor.length);
-    this.anim = new Uint8Array(this.n);
     const c = this.center.image.data as Float32Array;
     structures.forEach((s, i) => {
       c.set([s.center[0], s.center[1], s.center[2], s.layer], i * 4);
@@ -191,5 +195,6 @@ export class StructureState {
     this.state.dispose();
     this.color.dispose();
     this.center.dispose();
+    this.axis.dispose();
   }
 }

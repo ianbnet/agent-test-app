@@ -80,9 +80,9 @@ export function AnatomyModel({ model, children }: { model: LoadedModel; children
   const invalidate = useThree((s) => s.invalidate);
   const gl = useThree((s) => s.gl);
 
-  const structState = useMemo(() => new StructureState(model.manifest.structures), [model]);
+  const structState = useMemo(() => new StructureState(model.manifest.structures, model.axes), [model]);
   const shared = useMemo(
-    () => createSharedUniforms(structState.state, structState.color, structState.center),
+    () => createSharedUniforms(structState.state, structState.color, structState.center, structState.axis),
     [structState],
   );
   const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(1, 0, 0), 1e6), []);
@@ -109,8 +109,9 @@ export function AnatomyModel({ model, children }: { model: LoadedModel; children
     const list: { opaque: THREE.Mesh; translucent: THREE.Mesh; pick: THREE.Mesh; order: number; locals: ReturnType<typeof createAnatomyMaterial>["local"][] }[] = [];
     for (const g of model.groups) {
       const order = GROUP_ORDER.indexOf(g.group);
-      const a = createAnatomyMaterial(shared, { group: g.group, pass: 0, quality });
-      const b = createAnatomyMaterial(shared, { group: g.group, pass: 1, quality });
+      const bakedAo = !!g.geometry.getAttribute("_ao");
+      const a = createAnatomyMaterial(shared, { group: g.group, pass: 0, quality, bakedAo });
+      const b = createAnatomyMaterial(shared, { group: g.group, pass: 1, quality, bakedAo });
       a.material.clippingPlanes = [plane];
       b.material.clippingPlanes = [plane];
       const opaque = new THREE.Mesh(g.geometry, a.material);
@@ -259,15 +260,21 @@ export function AnatomyModel({ model, children }: { model: LoadedModel; children
   useFrame((_, dt) => {
     const d = Math.min(dt, 0.1);
     shared.uTime.value += d;
-    structState.step(d);
+    // easing uses real elapsed time so slow devices still converge in a couple of frames
+    const ease = Math.min(dt, 0.5);
+    const moving = structState.step(ease);
     const ex = explode - explodeCur.current;
-    if (Math.abs(ex) > 1e-4) {
-      explodeCur.current += ex * (1 - Math.exp(-d * 8));
+    const exploding = Math.abs(ex) > 1e-4;
+    if (exploding) {
+      explodeCur.current += ex * (1 - Math.exp(-ease * 8));
       shared.uExplode.value = explodeCur.current;
     } else {
       explodeCur.current = explode;
       shared.uExplode.value = explode;
     }
+    // The canvas renders on demand; keep frames coming only while something animates.
+    const st = useExplorer.getState();
+    if (moving || exploding || st.selected || st.hovered || st.quiz?.target || shared.uAnimOn.value > 0) invalidate();
     const act = structState.groupActivity((i) => groupIndex[i], model.groups.length);
     meshes.forEach((m, gi) => {
       m.opaque.visible = act.opaque[gi] === 1;
@@ -280,6 +287,7 @@ export function AnatomyModel({ model, children }: { model: LoadedModel; children
     () => ({ model, state: structState, shared, pickScene, plane, overlay, related }),
     [model, structState, shared, pickScene, plane, overlay, related],
   );
+  if (import.meta.env.DEV) (window as unknown as { __runtime?: AnatomyRuntime }).__runtime = runtime;
 
   return (
     <RuntimeContext.Provider value={runtime}>

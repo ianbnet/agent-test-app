@@ -12,6 +12,7 @@ import type { GroupId, ModelManifest, Sex, StructureMeta, Vec3 } from "../../sha
 import type { StructureSpec } from "./catalog";
 import { bounds, centroid, computeNormals, ensureSimplifier, simplify, taubinSmooth, weld, type Mesh } from "./lib/mesh";
 import { colorFor } from "./palette";
+import { bakeAo, buildBvh } from "./lib/ao";
 
 export interface BuiltStructure {
   spec: StructureSpec;
@@ -64,6 +65,8 @@ export interface ExportOptions {
   outDir: string;
   /** Scales every group's simplification error (use > 1 to shrink files). */
   errorScale?: number;
+  /** Skip the (slow) ambient-occlusion bake, e.g. for quick previews. */
+  skipAo?: boolean;
 }
 
 export async function exportModel(built: BuiltStructure[], opts: ExportOptions) {
@@ -78,6 +81,7 @@ export async function exportModel(built: BuiltStructure[], opts: ExportOptions) 
 
   const structures: StructureMeta[] = [];
   const perGroup = new Map<GroupId, { meshes: Mesh[]; sids: number[] }>();
+  const finals: { mesh: Mesh; layer: number; group: GroupId }[] = [];
   let totalTris = 0;
   for (const b of built) {
     const m = prepareMesh(b, errorScale);
@@ -113,6 +117,23 @@ export async function exportModel(built: BuiltStructure[], opts: ExportOptions) 
     if (!g) perGroup.set(b.spec.group, (g = { meshes: [], sids: [] }));
     g.meshes.push(m);
     g.sids.push(index);
+    finals.push({ mesh: m, layer: b.spec.layer, group: b.spec.group });
+  }
+
+  // Ambient occlusion per dissection layer: a structure is shadowed only by what remains
+  // visible when it is exposed (its own layer and deeper); the skin only by itself.
+  const aoByMesh = new Map<Mesh, Float32Array>();
+  if (!opts.skipAo) {
+    const t0 = Date.now();
+    for (let L = 0; L <= 4; L++) {
+      const targets = finals.filter((f) => f.layer === L);
+      if (!targets.length) continue;
+      const occluders = finals.filter((f) => (L === 0 ? f.group === "skin" : f.layer >= L && f.group !== "skin" && f.group !== "membrane"));
+      const bvh = buildBvh(occluders.map((f) => f.mesh));
+      if (!bvh) continue;
+      for (const f of targets) aoByMesh.set(f.mesh, bakeAo(f.mesh, computeNormals(f.mesh), bvh, { rays: 20, radius: 0.035 }));
+    }
+    console.log(`   ambient occlusion baked in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   }
 
   const doc = new Document();
@@ -129,6 +150,7 @@ export async function exportModel(built: BuiltStructure[], opts: ExportOptions) 
     const positions = new Float32Array(nv * 3);
     const normals = new Float32Array(nv * 3);
     const sid = new Float32Array(nv);
+    const ao = new Uint8Array(nv).fill(255);
     const indices = new Uint32Array(ni);
     let vo = 0;
     let io = 0;
@@ -137,6 +159,8 @@ export async function exportModel(built: BuiltStructure[], opts: ExportOptions) 
       positions.set(m.positions, vo * 3);
       normals.set(n, vo * 3);
       sid.fill(g.sids[k], vo, vo + m.positions.length / 3);
+      const a = aoByMesh.get(m);
+      if (a) for (let i = 0; i < a.length; i++) ao[vo + i] = Math.round(Math.min(1, Math.max(0, a[i])) * 255);
       for (let i = 0; i < m.indices.length; i++) indices[io + i] = m.indices[i] + vo;
       vo += m.positions.length / 3;
       io += m.indices.length;
@@ -146,6 +170,7 @@ export async function exportModel(built: BuiltStructure[], opts: ExportOptions) 
       .setAttribute("POSITION", doc.createAccessor().setType("VEC3").setArray(positions).setBuffer(buffer))
       .setAttribute("NORMAL", doc.createAccessor().setType("VEC3").setArray(normals).setBuffer(buffer))
       .setAttribute("_SID", doc.createAccessor().setType("SCALAR").setArray(sid).setBuffer(buffer))
+      .setAttribute("_AO", doc.createAccessor().setType("SCALAR").setArray(ao).setNormalized(true).setBuffer(buffer))
       .setIndices(doc.createAccessor().setType("SCALAR").setArray(indices).setBuffer(buffer));
     const node = doc.createNode(group).setMesh(doc.createMesh(group).addPrimitive(prim));
     scene.addChild(node);
