@@ -1,5 +1,5 @@
 {
-  "name": "rest-express",
+  "name": "anatomica",
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
@@ -11,9 +11,21 @@
     "db:push": "drizzle-kit push",
     "anatomy:fetch": "tsx scripts/anatomy/fetch-sources.ts",
     "anatomy:build": "tsx scripts/anatomy/build.ts",
-    "check:anatomy": "tsc -p scripts/anatomy/tsconfig.json"
+    "check:anatomy": "tsc -p scripts/anatomy/tsconfig.json",
+    "build:client": "vite build",
+    "cap:sync": "vite build && cap sync",
+    "cap:ios": "vite build && cap sync ios && cap open ios",
+    "cap:android": "vite build && cap sync android && cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.4",
@@ -85,6 +97,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@gltf-transform/core": "^4.5.0",
     "@gltf-transform/extensions": "^4.5.0",
     "@gltf-transform/functions": "^4.5.0",
@@ -110,6 +123,7 @@
     "meshoptimizer": "^1.2.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
+    "three-mesh-bvh": "^0.9.15",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
     "vite": "^7.3.0"

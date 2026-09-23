@@ -1,15 +1,12 @@
-import { pgTable, text, serial, integer } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { pgTable, serial, text } from "drizzle-orm/pg-core";
 
-export const counter = pgTable("counter", {
+/**
+ * The anatomy explorer keeps no server-side data; progress (quiz scores, preferences) lives
+ * on the device. This placeholder table keeps drizzle-kit configured for future features
+ * such as class rosters or shared quiz sets.
+ */
+export const meta = pgTable("meta", {
   id: serial("id").primaryKey(),
-  count: integer("count").notNull().default(0),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
 });
-
-export const insertCounterSchema = createInsertSchema(counter).pick({
-  count: true,
-});
-
-export type InsertCounter = z.infer<typeof insertCounterSchema>;
-export type Counter = typeof counter.$inferSelect;

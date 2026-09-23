@@ -3819,6 +3819,34 @@ export const visceral: Record<string, ConceptInfo> = {
       "Breast cancer is most common in the upper outer quadrant and spreads mainly to the axillary lymph nodes. Tumour involvement of Cooper ligaments dimples the skin, and blocked dermal lymphatics give an orange-peel appearance (peau d'orange).",
   },
 
+  "breast-adipose-tissue": {
+    summary:
+      "Most of the volume of the adult female breast is subcutaneous fat rather than glandular tissue. This adipose tissue surrounds and separates the lobes of the mammary gland, is partitioned by the suspensory (Cooper) ligaments, and gives the breast its size and contour.",
+    latin: "Corpus adiposum mammae",
+    functions: [
+      "Gives the breast its shape and most of its volume",
+      "Cushions and supports the glandular lobes and ducts",
+      "Stores energy and acts as an endocrine tissue (aromatase converts androgens to estrogens)",
+    ],
+    facts: [
+      { label: "Composition", value: "Typically about half to two-thirds fat by volume, varying widely between individuals and with age" },
+      { label: "Retromammary space", value: "A loose layer of areolar tissue between the breast and the pectoral fascia that lets the breast move over the chest wall" },
+      { label: "With age", value: "Glandular tissue is progressively replaced by fat, especially after menopause" },
+    ],
+    connections: [
+      { concept: "mammary-gland", relation: "contains", note: "surrounds the glandular lobes and lactiferous ducts" },
+      { concept: "pectoralis-major", relation: "adjacent-to", note: "separated from it by the retromammary space" },
+      { concept: "skin", relation: "adjacent-to", note: "Cooper ligaments run from the deep fascia to the dermis" },
+      { concept: "internal-thoracic-artery", relation: "supplied-by", note: "perforating branches" },
+      { concept: "lateral-thoracic-artery", relation: "supplied-by" },
+      { concept: "lateral-thoracic-vein", relation: "drained-by" },
+    ],
+    sexDifferences:
+      "Estrogen drives fat deposition in the breast at puberty, so the female breast is much larger and more fatty than the male breast, which is mostly skin, a little fat and rudimentary ducts.",
+    clinical:
+      "Fatty breasts look dark (radiolucent) on a mammogram, making tumours easier to see than in dense glandular breasts. Trauma can cause fat necrosis, a benign lump that can mimic cancer on examination.",
+  },
+
   // ─────────────────────────── Integumentary ───────────────────────────
   "skin": {
     summary:

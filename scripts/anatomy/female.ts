@@ -432,6 +432,61 @@ function rejectInconsistent(p: Pairs, radius: number, tol: number): Pairs {
   return out;
 }
 
+/**
+ * Enforce a bound on how fast the displacement may change between correspondences:
+ * |d_i - d_j| <= K |s_i - s_j| + eps. A displacement field with gradient below 1 cannot fold, so
+ * pairs that violate the bound are removed, blaming the less trusted (higher lambda) member,
+ * worst offenders first, until every pair is consistent with its neighbours.
+ */
+function enforceLipschitz(p: Pairs, K: number, radius: number, eps: number): Pairs {
+  let cur = p;
+  for (let round = 0; round < 40; round++) {
+    const n = cur.lambda.length;
+    const tree = new KdTree(Float32Array.from(cur.src));
+    const blame = new Float32Array(n);
+    const near: number[] = [];
+    let violations = 0;
+    for (let i = 0; i < n; i++) {
+      near.length = 0;
+      tree.radius(cur.src[i * 3], cur.src[i * 3 + 1], cur.src[i * 3 + 2], radius, near);
+      for (const j of near) {
+        if (j <= i) continue;
+        const ds = Math.hypot(cur.src[i * 3] - cur.src[j * 3], cur.src[i * 3 + 1] - cur.src[j * 3 + 1], cur.src[i * 3 + 2] - cur.src[j * 3 + 2]);
+        const dd = Math.hypot(
+          cur.dst[i * 3] - cur.src[i * 3] - (cur.dst[j * 3] - cur.src[j * 3]),
+          cur.dst[i * 3 + 1] - cur.src[i * 3 + 1] - (cur.dst[j * 3 + 1] - cur.src[j * 3 + 1]),
+          cur.dst[i * 3 + 2] - cur.src[i * 3 + 2] - (cur.dst[j * 3 + 2] - cur.src[j * 3 + 2]),
+        );
+        const excess = dd - (K * ds + eps);
+        if (excess <= 0) continue;
+        violations++;
+        const li = cur.lambda[i];
+        const lj = cur.lambda[j];
+        if (li > lj * 1.5) blame[i] += excess;
+        else if (lj > li * 1.5) blame[j] += excess;
+        else {
+          blame[i] += excess;
+          blame[j] += excess;
+        }
+      }
+    }
+    if (!violations) break;
+    // drop the worst ~4% of blamed pairs (at least one) and recount
+    const blamed = [...blame.keys()].filter((i) => blame[i] > 0).sort((a, b) => blame[b] - blame[a]);
+    const drop = new Set(blamed.slice(0, Math.max(1, Math.ceil(blamed.length * 0.08))));
+    const next: Pairs = { src: [], dst: [], lambda: [] };
+    for (let i = 0; i < n; i++) {
+      if (drop.has(i)) continue;
+      next.src.push(cur.src[i * 3], cur.src[i * 3 + 1], cur.src[i * 3 + 2]);
+      next.dst.push(cur.dst[i * 3], cur.dst[i * 3 + 1], cur.dst[i * 3 + 2]);
+      next.lambda.push(cur.lambda[i]);
+    }
+    if (process.env.ANATOMY_DEBUG) console.log(`   lipschitz round ${round}: ${violations} violations, dropped ${drop.size}`);
+    cur = next;
+  }
+  return cur;
+}
+
 /** Jacobian determinant of the spline (central differences). */
 function jacobianDet(tps: ThinPlateSpline, p: Vec3, h = 0.003): number {
   const a: Vec3 = [0, 0, 0];
@@ -609,7 +664,7 @@ export async function registerFemale(posed: BuiltStructure[], F: FemaleSources, 
   }
   const thin = thinPairs(tSrc, tDst, 0.025);
   addPairs(pairs, thin.src, thin.dst, 2e-3);
-  const clean = rejectInconsistent(pairs, 0.03, 0.025);
+  const clean = enforceLipschitz(rejectInconsistent(pairs, 0.03, 0.025), 0.75, 0.1, 0.004);
   let tps = ThinPlateSpline.fit(clean.src, clean.dst, clean.lambda);
   // Fold removal: drop correspondences where the spline's Jacobian degenerates, then refit.
   for (let pass = 0; pass < 4; pass++) {
@@ -764,10 +819,52 @@ export async function buildFemale(male: BuiltStructure[]): Promise<BuiltStructur
     }
     warped.push({ spec: b.spec, mesh: { positions: P, indices: b.mesh.indices }, prepared: true });
   }
+  if (process.env.ANATOMY_DEBUG) debugStrain(posed, warped, tps);
   const female = femaleStructures(F, warped);
   const keep = warped.filter((b) => !REPLACED.test(b.spec.id));
   console.log(`  [female] assembled ${keep.length + female.length} structures in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   return [...keep, ...female];
+}
+
+/** Reports the structures (and body regions) the spline stretches the most. */
+function debugStrain(posed: BuiltStructure[], warped: BuiltStructure[], tps: ThinPlateSpline) {
+  const rows: { id: string; p99: number; max: number; at: Vec3 }[] = [];
+  for (const w of warped) {
+    const src = posed.find((b) => b.spec.id === w.spec.id);
+    if (!src) continue;
+    const ratios: number[] = [];
+    let max = 0;
+    let at: Vec3 = [0, 0, 0];
+    const I = w.mesh.indices;
+    for (let t = 0; t < I.length; t += 3)
+      for (let e = 0; e < 3; e++) {
+        const a = I[t + e];
+        const b = I[t + ((e + 1) % 3)];
+        const l0 = Math.hypot(src.mesh.positions[a * 3] - src.mesh.positions[b * 3], src.mesh.positions[a * 3 + 1] - src.mesh.positions[b * 3 + 1], src.mesh.positions[a * 3 + 2] - src.mesh.positions[b * 3 + 2]);
+        if (l0 < 1e-5) continue;
+        const l1 = Math.hypot(w.mesh.positions[a * 3] - w.mesh.positions[b * 3], w.mesh.positions[a * 3 + 1] - w.mesh.positions[b * 3 + 1], w.mesh.positions[a * 3 + 2] - w.mesh.positions[b * 3 + 2]);
+        const r = l1 / l0;
+        ratios.push(r);
+        if (r > max) {
+          max = r;
+          at = [src.mesh.positions[a * 3], src.mesh.positions[a * 3 + 1], src.mesh.positions[a * 3 + 2]];
+        }
+      }
+    ratios.sort((x, y) => x - y);
+    rows.push({ id: w.spec.id, p99: ratios[Math.floor(ratios.length * 0.99)] ?? 0, max, at });
+  }
+  rows.sort((a, b) => b.max - a.max);
+  console.log("  [debug] most stretched structures (edge length ratio):");
+  for (const r of rows.slice(0, 25)) console.log(`    ${r.id.padEnd(40)} p99 ${r.p99.toFixed(2)} max ${r.max.toFixed(1)} at ${r.at.map((v) => v.toFixed(3)).join(",")}`);
+  // Jacobian scan over the lower trunk and thighs
+  const bad: string[] = [];
+  for (let y = 0.55; y <= 1.1; y += 0.02)
+    for (let x = -0.2; x <= 0.2; x += 0.02)
+      for (let z = -0.15; z <= 0.15; z += 0.02) {
+        const d = jacobianDet(tps, [x, y, z]);
+        if (d < 0.3 || d > 3.5) bad.push(`${x.toFixed(2)},${y.toFixed(2)},${z.toFixed(2)}:${d.toFixed(2)}`);
+      }
+  console.log(`  [debug] ${bad.length} degenerate grid points in pelvis/thighs`, bad.slice(0, 40).join(" "));
 }
 
 void bounds;

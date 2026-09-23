@@ -4,6 +4,9 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
+  // Relative asset paths so the same build runs from a web server and inside the
+  // Capacitor iOS/Android shells.
+  base: "./",
   plugins: [
     react(),
     runtimeErrorOverlay(),
@@ -30,6 +33,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: ["es2020", "safari15", "chrome100"],
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ["three"],
+          r3f: ["@react-three/fiber", "@react-three/drei"],
+        },
+      },
+    },
   },
   server: {
     fs: {
