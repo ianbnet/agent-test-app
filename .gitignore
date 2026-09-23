@@ -4,3 +4,5 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+# anatomy source data cache (downloaded by scripts/anatomy/fetch-sources.ts)
+.cache
