@@ -6,11 +6,6 @@ import { useAnatomyRuntime } from "./AnatomyModel";
 import { viewShift } from "./viewShift";
 import { visibility } from "./visibility";
 
-export interface PickHandlers {
-  /** Called for quiz "find it" taps instead of selecting. */
-  onQuizPick?: (id: string) => void;
-}
-
 /** Tap/click to select (GPU colour-ID picking), hover tooltips on mouse, double-tap to focus. */
 export function Interaction({ onHover }: { onHover?: (info: { id: string; x: number; y: number } | null) => void }) {
   const runtime = useAnatomyRuntime();

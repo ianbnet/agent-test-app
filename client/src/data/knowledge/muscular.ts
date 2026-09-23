@@ -4419,4 +4419,186 @@ export const muscular: Record<string, ConceptInfo> = {
     clinical:
       "In Bell's palsy (a lower motor neuron facial nerve lesion) all these muscles on one side are paralysed, including the forehead; after a stroke (upper motor neuron lesion) the forehead is largely spared because it receives input from both hemispheres.",
   },
+  occipitofrontalis: {
+    summary:
+      "The muscle of the scalp: a frontal belly over the forehead and an occipital belly over the back of the skull, joined by the tough epicranial aponeurosis. The frontal belly raises the eyebrows and wrinkles the forehead; the occipital belly anchors the aponeurosis from behind.",
+    latin: "Musculus occipitofrontalis",
+    functions: [
+      "Raises the eyebrows (surprise, attention) and wrinkles the forehead horizontally",
+      "Helps open the eyes widely by lifting the brow",
+      "Occipital belly pulls the scalp backwards and tenses the aponeurosis",
+    ],
+    facts: [
+      { label: "Parts", value: "Frontal and occipital bellies linked by the epicranial aponeurosis (galea)" },
+      { label: "Bony attachment", value: "Only the occipital belly attaches to bone; the frontal belly inserts into the skin of the eyebrows" },
+    ],
+    origin: "Frontal belly: epicranial aponeurosis. Occipital belly: lateral two-thirds of the superior nuchal line of the occipital bone and the mastoid process",
+    insertion: "Frontal belly: skin and fascia of the eyebrows and forehead. Occipital belly: epicranial aponeurosis",
+    action: "Elevates the eyebrows and wrinkles the forehead; moves the scalp",
+    innervation: "Facial nerve (CN VII): temporal branch to the frontal belly, posterior auricular branch to the occipital belly",
+    bloodSupply: "Supraorbital and supratrochlear arteries (from the ophthalmic artery) in front; occipital and posterior auricular arteries behind",
+    connections: [
+      { concept: "epicranial-aponeurosis", relation: "attaches-to", note: "both bellies insert into it" },
+      { concept: "occipital-bone", relation: "attaches-to", note: "origin of the occipital belly: superior nuchal line" },
+      { concept: "frontal-bone", relation: "adjacent-to", note: "frontal belly lies over it without bony attachment" },
+      { concept: "skin", relation: "attaches-to", note: "frontal belly inserts into the skin of the eyebrows" },
+      { concept: "facial-nerve-cn-vii", relation: "innervated-by", note: "temporal and posterior auricular branches" },
+      { concept: "ophthalmic-artery", relation: "supplied-by", note: "supraorbital and supratrochlear branches" },
+      { concept: "orbicularis-oculi", relation: "adjacent-to", note: "antagonist at the brow" },
+    ],
+    clinical:
+      "Loss of forehead wrinkling on one side distinguishes a facial nerve (lower motor neuron) palsy from a stroke, which spares the forehead because the frontalis receives input from both cerebral hemispheres.",
+  },
+
+  "epicranial-aponeurosis": {
+    summary:
+      "A strong, flat sheet of tendon (the galea aponeurotica) covering the top of the skull, joining the frontal and occipital bellies of occipitofrontalis. It is the third layer of the scalp and is firmly bound to the skin above but moves freely over the loose connective tissue beneath.",
+    latin: "Galea aponeurotica",
+    functions: [
+      "Transmits the pull of the frontal and occipital bellies, letting the scalp move as one unit",
+      "Forms the tough middle layer of the scalp (S-C-A-L-P: skin, connective tissue, aponeurosis, loose areolar tissue, pericranium)",
+    ],
+    facts: [
+      { label: "Layer of scalp", value: "The 'A' in SCALP" },
+      { label: "Lateral attachment", value: "Temporal fascia above the zygomatic arch" },
+    ],
+    connections: [
+      { concept: "occipitofrontalis", relation: "attaches-to", note: "frontal and occipital bellies" },
+      { concept: "parietal-bone", relation: "adjacent-to", note: "glides over the pericranium via loose areolar tissue" },
+      { concept: "frontal-bone", relation: "adjacent-to" },
+      { concept: "temporalis", relation: "adjacent-to", note: "blends laterally with the temporal fascia" },
+      { concept: "skin", relation: "attaches-to", note: "bound to the scalp skin by dense connective tissue" },
+    ],
+    clinical:
+      "Scalp wounds that cut through the aponeurosis gape widely because the frontal and occipital bellies pull the edges apart; blood and pus can spread freely in the loose layer beneath it (the 'danger area' of the scalp).",
+  },
+
+  "orbicularis-oculi": {
+    summary:
+      "A flat, ring-shaped sphincter surrounding each eye. Its thin palpebral part in the eyelids closes the eye gently in blinking and sleep, while the thicker orbital part around the orbit screws the eye shut forcefully.",
+    latin: "Musculus orbicularis oculi",
+    functions: [
+      "Closes the eyelids: gently in blinking (palpebral part), tightly in squinting (orbital part)",
+      "Spreads the tear film over the cornea and pumps tears into the lacrimal canaliculi (lacrimal part)",
+      "Produces 'crow's feet' wrinkles at the corner of the eye",
+    ],
+    facts: [
+      { label: "Parts", value: "Orbital, palpebral and lacrimal (deep) parts" },
+      { label: "Blink rate", value: "About 15–20 blinks per minute at rest" },
+    ],
+    origin: "Nasal part of the frontal bone, frontal process of the maxilla, medial palpebral ligament and lacrimal bone",
+    insertion: "Skin around the orbit, lateral palpebral raphe and the tarsal plates of the eyelids",
+    action: "Closes the eyelids; aids tear drainage",
+    innervation: "Facial nerve (CN VII): temporal and zygomatic branches",
+    bloodSupply: "Branches of the ophthalmic artery (palpebral, supraorbital) and of the facial and superficial temporal arteries",
+    connections: [
+      { concept: "frontal-bone", relation: "attaches-to", note: "origin: medial orbital margin" },
+      { concept: "maxilla", relation: "attaches-to", note: "origin: frontal process" },
+      { concept: "tarsal-plates", relation: "attaches-to", note: "palpebral part lies on them" },
+      { concept: "lacrimal-apparatus", relation: "acts-on", note: "lacrimal part pumps tears into the canaliculi" },
+      { concept: "facial-nerve-cn-vii", relation: "innervated-by", note: "temporal and zygomatic branches" },
+      { concept: "ophthalmic-artery", relation: "supplied-by", note: "palpebral branches" },
+      { concept: "occipitofrontalis", relation: "adjacent-to", note: "antagonist at the brow" },
+    ],
+    clinical:
+      "Facial nerve palsy prevents eye closure, so the cornea dries and ulcerates unless protected; the corneal reflex (blinking when the cornea is touched) tests the trigeminal (sensory) and facial (motor) nerves together.",
+  },
+
+  "orbicularis-oris": {
+    summary:
+      "The sphincter muscle of the mouth, forming most of the substance of the lips. Many other facial muscles blend into it, so it shapes the lips for speech, kissing, whistling and keeping food and fluid in the mouth.",
+    latin: "Musculus orbicularis oris",
+    functions: [
+      "Closes and purses the lips",
+      "Shapes the lips for articulating speech sounds (p, b, m, w)",
+      "Seals the mouth during chewing, sucking and swallowing",
+    ],
+    facts: [
+      { label: "Structure", value: "Mostly fibres from other facial muscles (especially buccinator) interlacing around the mouth, plus intrinsic lip fibres" },
+      { label: "Modiolus", value: "A knot of muscle fibres just lateral to each mouth corner where several muscles converge" },
+    ],
+    origin: "Maxilla and mandible near the midline, and fibres of buccinator and other muscles converging at the modiolus",
+    insertion: "Mucous membrane and skin of the lips",
+    action: "Closes, compresses and protrudes the lips",
+    innervation: "Facial nerve (CN VII): buccal and marginal mandibular branches",
+    bloodSupply: "Superior and inferior labial arteries (from the facial artery, a branch of the external carotid)",
+    connections: [
+      { concept: "maxilla", relation: "attaches-to", note: "incisive fibres near the midline" },
+      { concept: "mandible", relation: "attaches-to", note: "incisive fibres near the midline" },
+      { concept: "zygomaticus-major", relation: "adjacent-to", note: "inserts at the modiolus" },
+      { concept: "levator-labii-superioris", relation: "adjacent-to", note: "blends into the upper lip" },
+      { concept: "depressor-anguli-oris", relation: "adjacent-to", note: "inserts at the modiolus" },
+      { concept: "facial-nerve-cn-vii", relation: "innervated-by", note: "buccal and marginal mandibular branches" },
+      { concept: "common-carotid-artery", relation: "supplied-by", note: "via the external carotid's facial artery (labial branches)" },
+      { concept: "upper-teeth", relation: "adjacent-to", note: "the lips rest against the incisors" },
+    ],
+    clinical:
+      "Weakness from a facial nerve palsy lets food collect in the cheek and saliva drool from the mouth corner; the muscle is repaired in layers during cleft-lip surgery to restore lip function.",
+  },
+
+  "zygomaticus-major": {
+    summary:
+      "The main 'smiling muscle': a slender band running from the zygomatic (cheek) bone down to the corner of the mouth, which it pulls upwards and outwards.",
+    latin: "Musculus zygomaticus major",
+    functions: ["Draws the angle of the mouth up and laterally in smiling and laughing", "Deepens the nasolabial fold"],
+    facts: [
+      { label: "Genuine smile", value: "A felt (Duchenne) smile combines zygomaticus major with orbicularis oculi" },
+      { label: "Variation", value: "A bifid muscle is thought to underlie cheek dimples" },
+    ],
+    origin: "Lateral surface of the zygomatic bone, in front of the zygomaticotemporal suture",
+    insertion: "Modiolus at the angle of the mouth, blending with orbicularis oris",
+    action: "Elevates and retracts the angle of the mouth",
+    innervation: "Facial nerve (CN VII): zygomatic and buccal branches",
+    bloodSupply: "Superior labial branch of the facial artery (external carotid)",
+    connections: [
+      { concept: "zygomatic-bone", relation: "attaches-to", note: "origin" },
+      { concept: "orbicularis-oris", relation: "attaches-to", note: "insertion at the modiolus" },
+      { concept: "facial-nerve-cn-vii", relation: "innervated-by", note: "zygomatic and buccal branches" },
+      { concept: "common-carotid-artery", relation: "supplied-by", note: "via the external carotid's facial artery" },
+      { concept: "masseter", relation: "adjacent-to", note: "crosses superficial to its front edge" },
+      { concept: "depressor-anguli-oris", relation: "adjacent-to", note: "antagonist at the mouth corner" },
+    ],
+    clinical: "Drooping of the mouth corner on one side, with an asymmetric smile, is an early sign of facial nerve weakness.",
+  },
+
+  "levator-labii-superioris": {
+    summary:
+      "A thin, flat muscle running from just below the eye socket down into the upper lip, which it raises and everts, as when showing the upper teeth or expressing disgust.",
+    latin: "Musculus levator labii superioris",
+    functions: ["Elevates and everts the upper lip", "Deepens the nasolabial furrow in sadness or disgust"],
+    origin: "Infraorbital margin of the maxilla (and adjacent zygomatic bone), above the infraorbital foramen",
+    insertion: "Muscle and skin of the upper lip",
+    action: "Raises the upper lip",
+    innervation: "Facial nerve (CN VII): zygomatic and buccal branches",
+    bloodSupply: "Facial artery and infraorbital artery",
+    connections: [
+      { concept: "maxilla", relation: "attaches-to", note: "origin: infraorbital margin" },
+      { concept: "orbicularis-oris", relation: "attaches-to", note: "inserts into the upper lip" },
+      { concept: "facial-nerve-cn-vii", relation: "innervated-by" },
+      { concept: "orbicularis-oculi", relation: "adjacent-to", note: "origin is covered by its orbital part" },
+      { concept: "zygomaticus-major", relation: "adjacent-to" },
+    ],
+    clinical: "It covers the infraorbital foramen, the site where the infraorbital nerve is anaesthetised for procedures on the upper lip and teeth.",
+  },
+
+  "depressor-anguli-oris": {
+    summary:
+      "A triangular muscle below the corner of the mouth, arising from the lower border of the mandible and converging on the modiolus. It pulls the mouth corner down, as in frowning or sadness.",
+    latin: "Musculus depressor anguli oris",
+    functions: ["Depresses the angle of the mouth (frowning, sadness)", "Antagonises zygomaticus major and levator anguli oris"],
+    origin: "Oblique line of the mandible, below the canine to first molar teeth",
+    insertion: "Modiolus at the angle of the mouth",
+    action: "Draws the angle of the mouth downwards and laterally",
+    innervation: "Facial nerve (CN VII): marginal mandibular branch",
+    bloodSupply: "Inferior labial branch of the facial artery",
+    connections: [
+      { concept: "mandible", relation: "attaches-to", note: "origin: oblique line" },
+      { concept: "orbicularis-oris", relation: "attaches-to", note: "insertion at the modiolus" },
+      { concept: "facial-nerve-cn-vii", relation: "innervated-by", note: "marginal mandibular branch" },
+      { concept: "platysma", relation: "adjacent-to", note: "continuous with it below" },
+      { concept: "zygomaticus-major", relation: "adjacent-to", note: "antagonist" },
+    ],
+    clinical:
+      "Injury to the marginal mandibular branch of the facial nerve, which runs along the jaw line, during neck or jaw surgery causes an asymmetric lower lip and smile.",
+  },
 };

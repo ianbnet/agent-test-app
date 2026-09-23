@@ -2744,6 +2744,12 @@ export const visceral: Record<string, ConceptInfo> = {
     connections: [
       { concept: "pons", relation: "branch-of", note: "emerges at the pontomedullary junction (cerebellopontine angle)" },
       { concept: "muscles-of-facial-expression", relation: "controls" },
+      { concept: "occipitofrontalis", relation: "controls", note: "temporal and posterior auricular branches" },
+      { concept: "orbicularis-oculi", relation: "controls", note: "temporal and zygomatic branches" },
+      { concept: "zygomaticus-major", relation: "controls", note: "zygomatic branch" },
+      { concept: "levator-labii-superioris", relation: "controls", note: "zygomatic and buccal branches" },
+      { concept: "orbicularis-oris", relation: "controls", note: "buccal and marginal mandibular branches" },
+      { concept: "depressor-anguli-oris", relation: "controls", note: "marginal mandibular branch" },
       { concept: "platysma", relation: "controls", note: "cervical branch" },
       { concept: "digastric", relation: "controls", note: "posterior belly" },
       { concept: "stylohyoid", relation: "controls" },

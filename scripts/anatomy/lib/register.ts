@@ -3,7 +3,7 @@
  * (iterative TPS) registration used to establish correspondences between bodies.
  */
 import { KdTree } from "./kdtree";
-import { ThinPlateSpline, solveInPlace } from "./tps";
+import { solveInPlace } from "./tps";
 import type { Vec3 } from "./mesh";
 
 export type Mat4 = number[]; // column-major like three.js (16)
@@ -243,66 +243,4 @@ export function invertAffine(m: Mat4): Mat4 {
     -(inv[6] * t[0] + inv[7] * t[1] + inv[8] * t[2]),
   ];
   return [inv[0], inv[3], inv[6], 0, inv[1], inv[4], inv[7], 0, inv[2], inv[5], inv[8], 0, it[0], it[1], it[2], 1];
-}
-
-/**
- * Non-rigid registration of a source point set onto a target point set with
- * iterative TPS on a subset of control points (coarse-to-fine regularization).
- * Returns the deformed control points (src subset and where they map).
- */
-export function nonRigid(
-  src: Float32Array,
-  dst: Float32Array,
-  opts: { controls?: number; iterations?: number; lambdaStart?: number; lambdaEnd?: number } = {},
-): { from: Float32Array; to: Float32Array } {
-  const nCtrl = Math.min(opts.controls ?? 150, src.length / 3);
-  const step = Math.max(1, Math.floor(src.length / 3 / nCtrl));
-  const ctrlIdx: number[] = [];
-  for (let i = 0; i < src.length / 3 && ctrlIdx.length < nCtrl; i += step) ctrlIdx.push(i);
-  const from = new Float32Array(ctrlIdx.length * 3);
-  ctrlIdx.forEach((v, i) => from.set(src.subarray(v * 3, v * 3 + 3), i * 3));
-  const treeDst = new KdTree(dst);
-  let cur = src.slice();
-  let to = from.slice();
-  const iters = opts.iterations ?? 8;
-  const l0 = opts.lambdaStart ?? 0.05;
-  const l1 = opts.lambdaEnd ?? 0.001;
-  const o = { d2: 0 };
-  for (let it = 0; it < iters; it++) {
-    const lambda = l0 * Math.pow(l1 / l0, it / Math.max(1, iters - 1));
-    // forward: closest target point for each current source point, averaged into control targets
-    const treeCur = new KdTree(cur);
-    const acc = new Float64Array(ctrlIdx.length * 3);
-    const cnt = new Float64Array(ctrlIdx.length);
-    const ctrlTree = new KdTree(Float32Array.from(ctrlIdx.flatMap((v) => [src[v * 3], src[v * 3 + 1], src[v * 3 + 2]])));
-    const addPair = (srcI: number, tx: number, ty: number, tz: number) => {
-      // assign displacement to the nearest control (in source space)
-      const c = ctrlTree.nearest(src[srcI * 3], src[srcI * 3 + 1], src[srcI * 3 + 2]);
-      acc[c * 3] += tx - cur[srcI * 3];
-      acc[c * 3 + 1] += ty - cur[srcI * 3 + 1];
-      acc[c * 3 + 2] += tz - cur[srcI * 3 + 2];
-      cnt[c] += 1;
-    };
-    for (let i = 0; i < cur.length / 3; i++) {
-      const j = treeDst.nearest(cur[i * 3], cur[i * 3 + 1], cur[i * 3 + 2], o);
-      addPair(i, dst[j * 3], dst[j * 3 + 1], dst[j * 3 + 2]);
-    }
-    for (let j = 0; j < dst.length / 3; j++) {
-      const i = treeCur.nearest(dst[j * 3], dst[j * 3 + 1], dst[j * 3 + 2], o);
-      addPair(i, dst[j * 3], dst[j * 3 + 1], dst[j * 3 + 2]);
-    }
-    const target = new Float64Array(ctrlIdx.length * 3);
-    for (let c = 0; c < ctrlIdx.length; c++) {
-      const v = ctrlIdx[c];
-      const k = cnt[c] || 1;
-      target[c * 3] = cur[v * 3] + acc[c * 3] / k;
-      target[c * 3 + 1] = cur[v * 3 + 1] + acc[c * 3 + 1] / k;
-      target[c * 3 + 2] = cur[v * 3 + 2] + acc[c * 3 + 2] / k;
-    }
-    const tps = ThinPlateSpline.fit(from, target, lambda);
-    cur = src.slice();
-    tps.applyAll(cur);
-    to = Float32Array.from(target);
-  }
-  return { from, to };
 }

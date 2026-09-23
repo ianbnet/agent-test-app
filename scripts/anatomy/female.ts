@@ -7,13 +7,16 @@
  * Pipeline:
  *  1. Articulated re-posing of the male arms (shoulder & elbow rotations, soft skinning weights
  *     from the nearest bone) so they point like the female's A-pose.
- *  2. A thin-plate spline fitted to correspondences on the spine discs, pelvis, leg bones,
- *     sternum, organs, limbs (matched by position along/around the limb) and the body surface.
+ *  2. A thin-plate spline fitted to correspondences on the spine discs, pelvis, leg bones and
+ *     sternum (affine ICP per bone), organs, arms (matched by position along/around the limb)
+ *     and the body surface. Correspondences that disagree with more trusted neighbours, or
+ *     whose displacements change faster than a Lipschitz bound allows, are dropped so the
+ *     spline cannot fold.
  *  3. Replacement of male-specific structures and insertion of the female ones.
  */
 import { bounds, centroid, computeNormals, mergeMeshes, principalAxes, samplePoints, type Mesh, type Vec3 } from "./lib/mesh";
 import { KdTree } from "./lib/kdtree";
-import { fitSimilarity, icp, nonRigid, transformPoints, type Mat4 } from "./lib/register";
+import { fitSimilarity, icp, transformPoints, type Mat4 } from "./lib/register";
 import { ThinPlateSpline } from "./lib/tps";
 import { add, cross, dist, dot, extreme, lerp, len, norm, scale, sub, tube } from "./lib/tube";
 import { loadHra } from "./sources";
@@ -328,36 +331,31 @@ function poseArms(male: BuiltStructure[], arms: ArmSetup[]): BuiltStructure[] {
 // Correspondences
 // ------------------------------------------------------------------------------------------
 
-function boneCorrespondences(src: Mesh, dst: Mesh, init: Mat4, n = 500, controls = 60): { from: Float32Array; to: Float32Array } {
+/**
+ * Correspondences between a male bone and its female counterpart: an affine ICP fit (robust
+ * for every bone tested, typically 3–10 mm from the target surface), with each sample then
+ * snapped onto the target surface when it is already within a few millimetres of it.
+ */
+function boneCorrespondences(src: Mesh, dst: Mesh, init: Mat4, n = 500, count = 60, label = ""): { from: Float32Array; to: Float32Array } {
   const sp = samplePoints(src, n, 11);
   const dp = samplePoints(dst, n * 2, 13);
   const aff = icp(sp, dp, { mode: "affine", init, iterations: 30, trim: 0.85 });
-  const moved = transformPoints(aff, sp);
-  const nr = nonRigid(moved, dp, { controls, iterations: 6, lambdaStart: 0.01, lambdaEnd: 0.0005 });
-  const tree = new KdTree(moved);
-  const from = new Float32Array(nr.from.length);
-  for (let i = 0; i < nr.from.length / 3; i++) {
-    const j = tree.nearest(nr.from[i * 3], nr.from[i * 3 + 1], nr.from[i * 3 + 2]);
-    from.set(sp.subarray(j * 3, j * 3 + 3), i * 3);
+  const step = Math.max(1, Math.floor(sp.length / 3 / count));
+  const idx: number[] = [];
+  for (let i = 0; i < sp.length / 3; i += step) idx.push(i);
+  const from = Float32Array.from(idx.flatMap((i) => [sp[i * 3], sp[i * 3 + 1], sp[i * 3 + 2]]));
+  const to = transformPoints(aff, from);
+  const dstTree = new KdTree(dst.positions);
+  const o = { d2: 0 };
+  let gap = 0;
+  for (let i = 0; i < to.length; i += 3) {
+    const j = dstTree.nearest(to[i], to[i + 1], to[i + 2], o);
+    const d = Math.sqrt(o.d2);
+    if (d < 0.008) for (let k = 0; k < 3; k++) to[i + k] = dst.positions[j * 3 + k];
+    gap += d;
   }
-  return { from, to: nr.to };
-}
-
-function extremeFoot(skin: Mesh, s: 1 | -1, ankle: Vec3): Vec3 {
-  let best: Vec3 = ankle;
-  let bestScore = -Infinity;
-  for (let i = 0; i < skin.positions.length; i += 3) {
-    const x = skin.positions[i];
-    const y = skin.positions[i + 1];
-    const z = skin.positions[i + 2];
-    if (x * s <= 0 || y > ankle[1] || Math.abs(x - ankle[0]) > 0.08) continue;
-    const score = z - 0.2 * (y - ankle[1]);
-    if (score > bestScore) {
-      bestScore = score;
-      best = [x, y, z];
-    }
-  }
-  return best;
+  if (process.env.ANATOMY_DEBUG) console.log(`   bone ${label}: affine gap ${((gap / (to.length / 3)) * 1000).toFixed(1)} mm`);
+  return { from, to };
 }
 
 /** Match limb skin by (arc length along the limb, angle around it) on an unrolled cylinder. */
@@ -413,6 +411,10 @@ function rejectInconsistent(p: Pairs, radius: number, tol: number): Pairs {
   for (let i = 0; i < n; i++) {
     near.length = 0;
     tree.radius(p.src[i * 3], p.src[i * 3 + 1], p.src[i * 3 + 2], radius, near);
+    // judge a pair only by neighbours at least as trustworthy (bones are not outvoted by skin)
+    const peers = near.filter((j) => p.lambda[j] <= p.lambda[i] * 1.5);
+    near.length = 0;
+    near.push(...peers);
     if (near.length >= 4) {
       const med = [0, 1, 2].map((k) => {
         const vals = near.map((j) => p.dst[j * 3 + k] - p.src[j * 3 + k]).sort((a, b) => a - b);
@@ -601,11 +603,11 @@ export async function registerFemale(posed: BuiltStructure[], F: FemaleSources, 
     [/^patella-l$/, "knee-l", /^patella_L$/, 12],
   ];
   for (const [srcRe, file, dstRe, controls] of boneMap) {
-    const c = boneCorrespondences(byId(srcRe), F.get(file, dstRe), global, 500, controls);
+    const c = boneCorrespondences(byId(srcRe), F.get(file, dstRe), global, 500, controls, String(srcRe));
     addPairs(pairs, c.from, c.to, 2e-5);
   }
   {
-    const c = boneCorrespondences(byId(/^(manubrium-of-sternum|body-of-sternum)$/), mergeMeshes([F.get("sternum", /^sternum$/), F.get("manubrium", /^manubrium$/)]), global, 400, 30);
+    const c = boneCorrespondences(byId(/^(manubrium-of-sternum|body-of-sternum)$/), mergeMeshes([F.get("sternum", /^sternum$/), F.get("manubrium", /^manubrium$/)]), global, 400, 40, "sternum");
     addPairs(pairs, c.from, c.to, 2e-5);
   }
 

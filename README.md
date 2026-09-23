@@ -9,8 +9,8 @@ apps through Capacitor, fully offline.
 
 ## Features
 
-- **Two complete archetypes**: ♀ female and ♂ male, each with about 995 named structures and
-  830k triangles. Both include bones, muscles, tendons, arteries, veins, nerves, brain,
+- **Two complete archetypes**: ♀ female and ♂ male, each with about 1,010 named structures and
+  840k triangles. Both include bones, muscles, tendons, arteries, veins, nerves, brain,
   eyes, organs, glands and the lungs split into lobes.
 - **Dissection depth**: drag from *Skin → Superficial muscles → Deep muscles → Organs, vessels &
   nerves → Skeleton*. Layers fade continuously, and an optional translucent body outline
@@ -106,7 +106,7 @@ Other rendering details:
 
 ### Knowledge base (`client/src/data/knowledge`)
 
-About 590 concept entries (left and right twins share one) written for first-year university
+About 600 concept entries (left and right twins share one) written for first-year university
 level. They are typed by `types.ts` and link to each other through 15 relation types
 (`supplied-by`, `innervated-by`, `attaches-to`, `flows-to`, …). The base loads lazily after
 the model.
@@ -128,6 +128,10 @@ npm run check:anatomy   # type-check the pipeline
    - spinal nerves, brachial, lumbar and sacral plexuses and their major limb nerves
    - sympathetic trunk, and the vagus, phrenic and intercostal nerves
    - thyroid gland, latissimus dorsi, temporalis and masseter
+   - the internal oblique and transversus abdominis
+   - the muscles of facial expression: occipitofrontalis with the epicranial aponeurosis,
+     orbicularis oculi and oris, zygomaticus major, levator labii superioris and depressor
+     anguli oris
 3. **Female archetype** (`female.ts`):
    - The male model's arms are re-posed.
    - The model is warped into the Visible Human Female body with a thin-plate spline fitted
@@ -159,7 +163,7 @@ npm run check:anatomy   # type-check the pipeline
 - These are *archetypes*, not scans of one individual. The female body is produced by
   non-rigid registration, so small structures near the hips and groin can sit a few
   millimetres off.
-- Generated structures (lungs, spinal cord, peripheral nerves, thyroid and a few muscles)
-  are anatomically placed approximations.
+- Generated structures (lungs, spinal cord, peripheral nerves, thyroid, the facial muscles
+  and some trunk muscles) are anatomically placed approximations.
 - Physiological overlays show organ-level textbook values. They are not simulations.
 - The app is for education only and is not a clinical or diagnostic tool.

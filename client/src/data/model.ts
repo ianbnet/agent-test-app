@@ -149,16 +149,3 @@ function computeAnchors(manifest: ModelManifest, groups: LoadedModel["groups"]) 
 export function anchorOf(model: LoadedModel, index: number, out = new THREE.Vector3()) {
   return out.fromArray(model.anchors, index * 3);
 }
-
-/** Pick the instance of a concept closest to a reference structure (same side first). */
-export function nearestOfConcept(model: LoadedModel, concept: string, ref?: StructureMeta): StructureMeta[] {
-  const list = model.byConcept.get(concept);
-  if (!list) return [];
-  if (!ref || list.length === 1) return list;
-  if (ref.side) {
-    const same = list.filter((s) => s.side === ref.side);
-    if (same.length) return same;
-  }
-  // Midline reference: keep both sides (e.g. the aorta supplies left and right renal arteries).
-  return list;
-}

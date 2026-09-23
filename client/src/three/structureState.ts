@@ -50,7 +50,7 @@ export class StructureState {
   private settled = false;
   private tmp = new THREE.Color();
 
-  constructor(private structures: StructureMeta[], axes?: Float32Array) {
+  constructor(structures: StructureMeta[], axes?: Float32Array) {
     this.n = structures.length;
     const h = Math.ceil(this.n / TEX_WIDTH);
     const mk = () => {
@@ -130,7 +130,8 @@ export class StructureState {
         const oc = v.overlay.colors[i];
         hex = oc ?? NO_DATA;
       }
-      const rel = mark?.tint ?? v.related.get(i);
+      // with a data layer on, its colours win; arcs and callouts still show the connections
+      const rel = mark?.tint ?? (v.overlay ? undefined : v.related.get(i));
       this.tmp.set(hex);
       if (rel) {
         this.tmp.lerp(new THREE.Color(rel), mark?.tint ? 0.8 : 0.55);

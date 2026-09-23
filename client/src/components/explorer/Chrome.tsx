@@ -219,8 +219,8 @@ export function CreditsDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                   , CC BY 4.0 — the female body surface, pelvis, knee, sternum, discs and female reproductive organs (Visible Human female).
                 </li>
                 <li>
-                  Lungs, spinal cord and peripheral nerves, thyroid, latissimus dorsi, temporalis, masseter, vagina and female urethra were
-                  modelled procedurally from the surrounding anatomy. Female anatomy was produced by non-rigid registration and is an
+                  Lungs, spinal cord and peripheral nerves, thyroid, the muscles of facial expression, latissimus dorsi, the internal
+                  oblique and transversus abdominis, temporalis, masseter, vagina and female urethra were modelled procedurally from the surrounding anatomy. Female anatomy was produced by non-rigid registration and is an
                   archetype, not a scan of one person.
                 </li>
                 <li>

@@ -5,7 +5,9 @@
  */
 import {
   bounds,
+  centroid,
   compact,
+  mergeMeshes,
   computeNormals,
   connectedComponents,
   subdivide,
@@ -20,7 +22,7 @@ import { KdTree } from "../lib/kdtree";
 import { extreme } from "../lib/tube";
 import { generatedStructure, queryMesh } from "./context";
 import type { BuiltStructure } from "../export";
-import type { Side } from "../../../shared/anatomy";
+import type { GroupId, Side } from "../../../shared/anatomy";
 
 type Sgn = 1 | -1;
 const sideWord = (s: Sgn): Side => (s > 0 ? "left" : "right");
@@ -78,7 +80,9 @@ function skinSheet(
   skin: Mesh,
   opts: {
     name: string;
-    side: Sgn;
+    /** 0 for a midline structure. */
+    side: Sgn | 0;
+    group?: GroupId;
     region: (p: Vec3) => boolean;
     outward: (p: Vec3) => Vec3;
     fat: number;
@@ -86,32 +90,59 @@ function skinSheet(
     taper: number;
     /** Tissue the sheet must not sink into (e.g. the skull under the temporalis). */
     floor?: Mesh;
+    /** Keep secondary pieces of at least a quarter of the main patch. */
+    multi?: boolean;
+    /** Minimum cosine between skin normal and `outward` (default 0.15). */
+    minFacing?: number;
+    color?: string;
+    layer?: 1 | 2;
   },
 ): BuiltStructure | null {
+  const facing = (p: Vec3, nx: number, ny: number, nz: number) => {
+    const o = opts.outward(p);
+    const ol = Math.hypot(o[0], o[1], o[2]) || 1;
+    return (nx * o[0] + ny * o[1] + nz * o[2]) / ol >= (opts.minFacing ?? 0.15);
+  };
+  // 1. coarse candidate: skin triangles touching the region
   const nrm = computeNormals(skin);
   const P = skin.positions;
-  const tris: number[] = [];
+  const cand: number[] = [];
   for (let t = 0; t < skin.indices.length; t += 3) {
-    let ok = true;
-    for (let k = 0; k < 3 && ok; k++) {
+    let touch = false;
+    let face = true;
+    for (let k = 0; k < 3; k++) {
       const v = skin.indices[t + k];
       const p: Vec3 = [P[v * 3], P[v * 3 + 1], P[v * 3 + 2]];
-      const o = opts.outward(p);
-      const ol = Math.hypot(o[0], o[1], o[2]) || 1;
-      if (!opts.region(p) || (nrm[v * 3] * o[0] + nrm[v * 3 + 1] * o[1] + nrm[v * 3 + 2] * o[2]) / ol < 0.15) ok = false;
+      if (opts.region(p)) touch = true;
+      if (!facing(p, nrm[v * 3], nrm[v * 3 + 1], nrm[v * 3 + 2])) face = false;
     }
-    if (ok) tris.push(skin.indices[t], skin.indices[t + 1], skin.indices[t + 2]);
+    if (touch && face) cand.push(skin.indices[t], skin.indices[t + 1], skin.indices[t + 2]);
+  }
+  if (cand.length < 9) return null;
+  // 2. refine the (coarse) skin so thin straps get a clean outline, then trim to the region
+  let fine = weld(compact({ positions: P, indices: Uint32Array.from(cand) }), 1e-6);
+  const edge0 = Math.sqrt((2 * Math.max(1e-9, surfaceAreaOf(fine))) / (fine.indices.length / 3));
+  for (let it = 0; it < 3 && edge0 / 2 ** it > 0.0025; it++) fine = subdivide(fine);
+  const fn = computeNormals(fine);
+  const FP = fine.positions;
+  const tris: number[] = [];
+  for (let t = 0; t < fine.indices.length; t += 3) {
+    let ok = true;
+    for (let k = 0; k < 3 && ok; k++) {
+      const v = fine.indices[t + k];
+      const p: Vec3 = [FP[v * 3], FP[v * 3 + 1], FP[v * 3 + 2]];
+      if (!opts.region(p) || !facing(p, fn[v * 3], fn[v * 3 + 1], fn[v * 3 + 2])) ok = false;
+    }
+    if (ok) tris.push(fine.indices[t], fine.indices[t + 1], fine.indices[t + 2]);
   }
   if (tris.length < 30) return null;
-  // largest connected patch only
-  const comps = connectedComponents(weld(compact({ positions: P, indices: Uint32Array.from(tris) }), 1e-6)).sort(
+  // 3. main patch plus any sizeable secondary pieces (e.g. both lips of a sphincter)
+  const comps = connectedComponents(weld(compact({ positions: FP, indices: Uint32Array.from(tris) }), 1e-6)).sort(
     (a, b) => b.indices.length - a.indices.length,
   );
   if (process.env.ANATOMY_DEBUG) console.log("   sheet", opts.name, tris.length / 3, comps.slice(0, 5).map((c) => c.indices.length / 3));
-  // refine the (coarse) skin patch so the offset sheet is smooth
-  let patch = comps[0];
-  const edge = Math.sqrt((2 * Math.max(1e-9, surfaceAreaOf(patch))) / (patch.indices.length / 3));
-  for (let it = 0; it < 3 && edge / 2 ** it > 0.004; it++) patch = subdivide(patch);
+  const keep = comps.filter((c) => c.indices.length >= comps[0].indices.length * (opts.multi ? 0.25 : 1));
+  let patch = keep.length > 1 ? mergeMeshes(keep) : keep[0];
   patch = taubinSmooth(patch, 4);
   const n = patch.positions.length / 3;
   const pn = computeNormals(patch);
@@ -186,7 +217,202 @@ function skinSheet(
   }
   let mesh = weld({ positions, indices }, 1e-6);
   mesh = taubinSmooth(mesh, 6);
-  return generatedStructure(opts.name, mesh, { side: sideWord(opts.side), system: "muscular", group: "muscle", layer: 1, generator: "skin-sheet" });
+  return generatedStructure(opts.name, mesh, {
+    side: opts.side ? sideWord(opts.side) : undefined,
+    system: "muscular",
+    group: opts.group ?? "muscle",
+    layer: opts.layer ?? 1,
+    generator: "skin-sheet",
+    color: opts.color,
+  });
+}
+
+const sub3 = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+/** Distance from p to segment ab. */
+function segDist(p: Vec3, a: Vec3, b: Vec3) {
+  const ab = sub3(b, a);
+  const ap = sub3(p, a);
+  const t = Math.max(0, Math.min(1, (ap[0] * ab[0] + ap[1] * ab[1] + ap[2] * ab[2]) / (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2)));
+  return Math.hypot(ap[0] - ab[0] * t, ap[1] - ab[1] * t, ap[2] - ab[2] * t);
+}
+
+/**
+ * Muscles of facial expression and the scalp (absent from BodyParts3D), laid under the skin of
+ * the face from bony and soft-tissue landmarks: eyes, lips, zygomatic bones, mandible, skull.
+ */
+export function generateFacialMuscles(built: BuiltStructure[]): BuiltStructure[] {
+  const t0 = Date.now();
+  const skin = built.find((b) => b.spec.group === "skin")!.mesh;
+  const out: BuiltStructure[] = [];
+  const skull = queryMesh(/^(frontal bone|left parietal bone|right parietal bone|parietal bone|occipital bone|left temporal bone|right temporal bone|sphenoid bone|left zygomatic bone|right zygomatic bone|left maxilla|right maxilla|mandible|left nasal bone|right nasal bone)$/i);
+  const teeth = queryMesh(/(upper|lower) .*secondary .*tooth$/i);
+  const lip = queryMesh(/^lip$/i);
+  const lb = bounds(lip);
+  const mouth: Vec3 = [0, (lb.min[1] + lb.max[1]) / 2, lb.max[2] - 0.004];
+  const mand = bounds(queryMesh(/^mandible$/i));
+  const occ = queryMesh(/^occipital bone$/i);
+  const inion = extreme(occ, [0, 0.15, -1]);
+  const eyes = ([1, -1] as Sgn[]).map((s) => {
+    const sc = queryMesh(new RegExp(`^${sideWord(s)} sclera$`, "i"));
+    return { s, c: centroid(sc), b: bounds(sc), mesh: sc };
+  });
+  const browY = Math.max(...eyes.map((e) => e.b.max[1])) + 0.012;
+  const eyeZ = Math.max(...eyes.map((e) => e.b.max[2]));
+  const headTop = bounds(skin).max[1];
+  const floorFace = mergeMeshes([skull, teeth, ...eyes.map((e) => e.mesh)]);
+  const headC: Vec3 = [0, browY + 0.01, (eyeZ + inion[2]) / 2];
+
+  // Epicranial aponeurosis (galea): tendinous cap joining the frontal and occipital bellies.
+  const galea = skinSheet(skin, {
+    name: "epicranial aponeurosis",
+    side: 0,
+    group: "tendon",
+    color: "#c3ced3",
+    outward: (p) => sub3(p, headC),
+    region: (p) => p[1] > headTop - 0.2 && Math.abs(p[0]) < 0.068 && (p[2] > headC[2] ? p[1] > browY + 0.052 : p[1] > inion[1] + 0.038),
+    fat: 0.004,
+    thickness: 0.0016,
+    taper: 0.01,
+    floor: skull,
+  });
+  if (galea) out.push(galea);
+
+  // Orbicularis oris: sphincter around the mouth (with a slit for the oral fissure).
+  const oris = skinSheet(skin, {
+    name: "orbicularis oris",
+    side: 0,
+    outward: () => [0, 0, 1],
+    region: (p) => {
+      if (p[2] < mouth[2] - 0.03) return false;
+      const e = (p[0] / 0.031) ** 2 + ((p[1] - mouth[1]) / 0.022) ** 2;
+      const slit = Math.abs(p[1] - mouth[1]) < 0.0016 && Math.abs(p[0]) < 0.023;
+      return e < 1 && !slit;
+    },
+    fat: 0.0025,
+    thickness: 0.0042,
+    taper: 0.008,
+    floor: floorFace,
+    multi: true,
+  });
+  if (oris) out.push(oris);
+
+  for (const eye of eyes) {
+    const s = eye.s;
+    const [ex, ey] = [eye.c[0], eye.c[1]];
+    // Occipitofrontalis: frontal belly on the forehead + occipital belly over the back of the skull.
+    const frontal = skinSheet(skin, {
+      name: "occipitofrontalis",
+      side: s,
+      outward: () => [0, 0.3, 1],
+      region: (p) => {
+        const ax = p[0] * s;
+        if (p[2] < eyeZ - 0.035 || ax < 0.003 || ax > 0.054) return false;
+        // lower border follows the eyebrow arch, upper border curves into the galea
+        const lower = browY - 0.004 + 9 * (ax - 0.026) ** 2;
+        const upper = browY + 0.066 - 14 * (ax - 0.02) ** 2;
+        return p[1] > lower && p[1] < upper;
+      },
+      fat: 0.003,
+      thickness: 0.003,
+      taper: 0.014,
+      floor: skull,
+      minFacing: -1,
+    });
+    const occipital = skinSheet(skin, {
+      name: "occipitofrontalis",
+      side: s,
+      outward: () => [0, 0.2, -1],
+      region: (p) => {
+        const ax = p[0] * s;
+        if (p[2] > inion[2] + 0.04 || ax < 0.008 || ax > 0.05) return false;
+        return p[1] > inion[1] + 0.004 + 4 * (ax - 0.03) ** 2 && p[1] < inion[1] + 0.046 - 10 * (ax - 0.028) ** 2;
+      },
+      fat: 0.004,
+      thickness: 0.003,
+      taper: 0.012,
+      floor: skull,
+      minFacing: -0.2,
+    });
+    const bellies = [frontal, occipital].filter((b): b is BuiltStructure => !!b);
+    if (bellies.length) out.push({ spec: bellies[0].spec, mesh: mergeMeshes(bellies.map((b) => b.mesh)) });
+
+    // Orbicularis oculi: concentric sphincter around the orbit, open at the palpebral fissure.
+    const oculi = skinSheet(skin, {
+      name: "orbicularis oculi",
+      side: s,
+      outward: () => [s * 0.25, 0, 1],
+      region: (p) => {
+        if (p[2] < eye.b.max[2] - 0.02 || p[0] * s < 0.006) return false;
+        const outer = ((p[0] - ex) / 0.031) ** 2 + ((p[1] - ey) / 0.026) ** 2;
+        const inner = ((p[0] - ex) / 0.016) ** 2 + ((p[1] - ey - 0.001) / 0.0075) ** 2;
+        return outer < 1 && inner > 1;
+      },
+      fat: 0.0012,
+      thickness: 0.0025,
+      taper: 0.007,
+      floor: floorFace,
+      minFacing: -0.1,
+    });
+    if (oculi) out.push(oculi);
+
+    const corner = extreme(lip, [s, 0, 0]);
+    const modiolus: Vec3 = [corner[0] + s * 0.004, corner[1] + 0.002, corner[2]];
+    const zygM = queryMesh(new RegExp(`^${sideWord(s)} zygomatic bone$`, "i"));
+    const malar = extreme(zygM, [s, 0.1, 0.8]);
+    // Zygomaticus major: zygomatic bone to the angle of the mouth.
+    const zyg = skinSheet(skin, {
+      name: "zygomaticus major",
+      side: s,
+      outward: () => [s * 0.6, 0, 1],
+      region: (p) => p[2] > modiolus[2] - 0.08 && segDist(p, [malar[0] - s * 0.004, malar[1] - 0.004, malar[2]], modiolus) < 0.0062,
+      fat: 0.004,
+      thickness: 0.004,
+      taper: 0.005,
+      floor: floorFace,
+      multi: true,
+      minFacing: -0.1,
+    });
+    if (zyg) out.push(zyg);
+    // Levator labii superioris: infraorbital margin to the upper lip.
+    const infraorbital: Vec3 = [ex - s * 0.002, eye.b.min[1] - 0.01, eye.b.max[2]];
+    const upperLip: Vec3 = [s * 0.011, mouth[1] + 0.009, mouth[2]];
+    const lls = skinSheet(skin, {
+      name: "levator labii superioris",
+      side: s,
+      outward: () => [s * 0.2, 0, 1],
+      region: (p) => p[2] > upperLip[2] - 0.035 && p[0] * s > 0.004 && segDist(p, infraorbital, upperLip) < 0.0065,
+      fat: 0.004,
+      thickness: 0.003,
+      taper: 0.005,
+      floor: floorFace,
+      multi: true,
+      minFacing: -0.1,
+    });
+    if (lls) out.push(lls);
+    // Depressor anguli oris: triangular, from the mouth corner down to the mandible's lower border.
+    const b1: Vec3 = [s * 0.026, mand.min[1] + 0.006, 0];
+    const b2: Vec3 = [s * 0.05, mand.min[1] + 0.01, 0];
+    const inTri = (p: Vec3) => {
+      const cross = (a: Vec3, b: Vec3, c: Vec3) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      const d1 = cross(modiolus, b1, p);
+      const d2 = cross(b1, b2, p);
+      const d3 = cross(b2, modiolus, p);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    };
+    const dao = skinSheet(skin, {
+      name: "depressor anguli oris",
+      side: s,
+      outward: () => [s * 0.4, -0.3, 1],
+      region: (p) => p[2] > modiolus[2] - 0.05 && inTri(p),
+      fat: 0.004,
+      thickness: 0.003,
+      taper: 0.005,
+      floor: floorFace,
+    });
+    if (dao) out.push(dao);
+  }
+  console.log(`  facial muscles: ${out.length} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  return out;
 }
 
 export function generateMissingMuscles(built: BuiltStructure[]): BuiltStructure[] {
@@ -199,6 +425,7 @@ export function generateMissingMuscles(built: BuiltStructure[]): BuiltStructure[
   const zc = (trunk.min[2] + trunk.max[2]) / 2;
   const mand = queryMesh(/^mandible$/i);
   const skull = queryMesh(/^(frontal bone|parietal bone|left parietal bone|right parietal bone|left temporal bone|right temporal bone|sphenoid bone|left zygomatic bone|right zygomatic bone|left maxilla|right maxilla|mandible|occipital bone)$/i);
+  const viscera = mergeMeshes(built.filter((b) => b.spec.layer === 3 && (b.spec.group === "organ" || b.spec.group === "lung")).map((b) => b.mesh));
   for (const s of [1, -1] as Sgn[]) {
     const scap = bounds(queryMesh(new RegExp(`^${sideWord(s)} scapula$`, "i")));
     // Latissimus dorsi: from the T7-L5 spinous processes, thoracolumbar fascia and iliac crest,
@@ -267,6 +494,44 @@ export function generateMissingMuscles(built: BuiltStructure[]): BuiltStructure[
       floor: skull,
     });
     if (masseter) out.push(masseter);
+
+    // Internal oblique and transversus abdominis: the deeper two layers of the anterolateral
+    // abdominal wall, laid beneath the external oblique between the costal margin and iliac crest.
+    const eo = built.find((b) => b.spec.concept === "external-oblique" && b.spec.side === sideWord(s));
+    const rib10 = bounds(queryMesh(new RegExp(`^${sideWord(s)} tenth rib$`, "i")));
+    if (eo) {
+      const wall = (medial: number) => (p: Vec3) => {
+        const ax = p[0] * s;
+        if (ax < medial || p[2] < zc - 0.06) return false;
+        return p[1] > hip.max[1] - 0.035 && p[1] < rib10.min[1] + 0.035;
+      };
+      const io = skinSheet(eo.mesh, {
+        name: "internal oblique",
+        side: s,
+        layer: 2,
+        outward: (p) => [p[0], 0, p[2] - zc],
+        region: wall(0.06),
+        fat: 0.005,
+        thickness: 0.006,
+        taper: 0.02,
+        floor: viscera,
+        minFacing: 0.1,
+      });
+      if (io) out.push(io);
+      const ta = skinSheet(eo.mesh, {
+        name: "transversus abdominis",
+        side: s,
+        layer: 2,
+        outward: (p) => [p[0], 0, p[2] - zc],
+        region: wall(0.055),
+        fat: 0.012,
+        thickness: 0.004,
+        taper: 0.02,
+        floor: viscera,
+        minFacing: 0.1,
+      });
+      if (ta) out.push(ta);
+    }
   }
   console.log(`  missing muscles: ${out.length} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   return out;
