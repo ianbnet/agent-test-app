@@ -34,6 +34,34 @@ export function loadModel(sex: Sex, onProgress?: (fraction: number) => void): Pr
   return p;
 }
 
+/**
+ * Hosts that only serve web file types (e.g. published Claude artifacts) get the GLBs as
+ * base64 text; build with VITE_MODEL_FORMAT=b64 to load `<name>.glb.b64.txt` instead.
+ */
+const BASE64_MODELS = import.meta.env.VITE_MODEL_FORMAT === "b64";
+
+async function loadGltf(loader: GLTFLoader, path: string, onProgress: (loaded: number, total: number) => void) {
+  if (!BASE64_MODELS) return loader.loadAsync(assetUrl(path), (e) => onProgress(e.loaded, e.total));
+  const res = await fetch(assetUrl(`${path}.b64.txt`));
+  if (!res.ok || !res.body) throw new Error(`Could not load ${path} (${res.status})`);
+  const total = Number(res.headers.get("content-length")) || 0;
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (total) onProgress(received, total);
+  }
+  const text = new TextDecoder().decode(await new Blob(chunks as BlobPart[]).arrayBuffer());
+  const bin = atob(text.trim());
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return loader.parseAsync(bytes.buffer, "");
+}
+
 async function fetchModel(sex: Sex, onProgress?: (fraction: number) => void): Promise<LoadedModel> {
   const manifestP = fetch(assetUrl(`models/${sex}.json`)).then((r) => {
     if (!r.ok) throw new Error(`Could not load ${sex} manifest (${r.status})`);
@@ -41,13 +69,31 @@ async function fetchModel(sex: Sex, onProgress?: (fraction: number) => void): Pr
   });
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
-  const gltf = await loader.loadAsync(assetUrl(`models/${sex}.glb`), (e) => {
-    if (onProgress && e.total) onProgress(e.loaded / e.total);
-  });
+  // The compressed model needs a WebAssembly decoder. Hosts that forbid WebAssembly get the
+  // same geometry uncompressed, split in two files (published only where it is needed).
+  const wasm =
+    MeshoptDecoder.supported &&
+    (await MeshoptDecoder.ready.then(
+      () => true,
+      () => false,
+    ));
+  const files = wasm ? [`models/${sex}.glb`] : [`models/${sex}-raw-1.glb`, `models/${sex}-raw-2.glb`];
+  const loaded = new Array<number>(files.length).fill(0);
+  const totals = new Array<number>(files.length).fill(0);
+  const scenes = await Promise.all(
+    files.map((f, i) =>
+      loadGltf(loader, f, (done, total) => {
+        loaded[i] = done;
+        totals[i] = total;
+        const sum = totals.reduce((a, b) => a + b, 0);
+        if (onProgress && sum && totals.every(Boolean)) onProgress(loaded.reduce((a, b) => a + b, 0) / sum);
+      }),
+    ),
+  );
   const manifest = await manifestP;
-  gltf.scene.updateMatrixWorld(true);
   const groups: LoadedModel["groups"] = [];
-  gltf.scene.traverse((o) => {
+  for (const gltf of scenes) gltf.scene.updateMatrixWorld(true);
+  for (const gltf of scenes) gltf.scene.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     const entry = manifest.groups.find((g) => g.node === mesh.name || g.node === mesh.parent?.name);
